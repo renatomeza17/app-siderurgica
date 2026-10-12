@@ -64,26 +64,106 @@ class ErpViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun clearMessage() { mutable.value = mutable.value.copy(message = "") }
-    fun loginUnificado(identifier: String, pass: String, erpUser: String = "", erpPassword: String = "") = run {
-        require(identifier.isNotBlank() && pass.isNotBlank()) { "Completa tus datos de acceso." }
-        val username: String
-        if (auth != null) {
-            require(BusinessRules.validEmail(identifier)) { "Ingresa un correo válido para Firebase." }
-            require(erpUser.isNotBlank()) { "Indica el usuario asignado por el administrador del ERP." }
-            auth.signInWithEmailAndPassword(identifier.trim(), pass).await()
-            username = erpUser.trim()
-        } else { username = identifier.trim() }
-        val session = repo.login(username, erpPassword.ifBlank { pass })
-        mutable.value = mutable.value.copy(session = session, firebaseEmail = auth?.currentUser?.email)
+
+    fun loginUnificado(identifier: String, pass: String) = run {
+        val email = identifier.trim()
+
+        require(email.isNotBlank() && pass.isNotBlank()) {
+            "Completa el correo y la contraseña."
+        }
+
+        require(auth == null || BusinessRules.validEmail(email)) {
+            "Ingresa el correo completo registrado en Firebase."
+        }
+
+        // admin@siderurgica.com -> admin
+        val username = email.substringBefore("@").trim()
+
+        try {
+            val session = repo.login(username, pass)
+
+            auth?.signInWithEmailAndPassword(email, pass)?.await()
+
+            mutable.value = mutable.value.copy(
+                session = session,
+                firebaseEmail = auth?.currentUser?.email
+            )
+        } catch (e: Exception) {
+            repo.vault.clear()
+            auth?.signOut()
+
+            mutable.value = mutable.value.copy(
+                session = null,
+                firebaseEmail = null
+            )
+
+            when (e) {
+                is kotlinx.coroutines.CancellationException -> throw e
+
+                is com.google.firebase.auth.FirebaseAuthException ->
+                    error(
+                        "Firebase no aceptó el correo y la contraseña. " +
+                                "Comprueba el acceso de esa cuenta."
+                    )
+
+                is retrofit2.HttpException -> {
+                    if (e.code() == 401 || e.code() == 403) {
+                        error(
+                            "El ERP no aceptó el usuario '$username' " +
+                                    "con esa contraseña."
+                        )
+                    } else {
+                        throw e
+                    }
+                }
+
+                else -> throw e
+            }
+        }
+
         refreshData()
     }
     fun registerUnificado(email: String, pass: String) = run {
-        require(BusinessRules.validEmail(email)) { "Ingresa un correo válido." }
-        require(pass.length >= 6) { "La contraseña debe tener al menos 6 caracteres." }
-        val firebase = auth ?: error("El acceso Firebase todavía no está disponible.")
-        firebase.createUserWithEmailAndPassword(email.trim(), pass).await()
-        mutable.value = mutable.value.copy(firebaseEmail = firebase.currentUser?.email,
-            message = "Cuenta Firebase creada. Ingresa con tu usuario ERP asignado; el registro no crea una cuenta empresarial.")
+        val cleanEmail = email.trim()
+
+        require(BusinessRules.validEmail(cleanEmail)) {
+            "Ingresa un correo válido."
+        }
+        require(pass.length >= 6) {
+            "La contraseña debe tener al menos 6 caracteres."
+        }
+
+        val firebase = auth
+            ?: error("Firebase no está configurado en esta aplicación.")
+
+        try {
+            // El usuario debe existir previamente en el ERP.
+            // Su rol lo devuelve el backend.
+            val session = repo.login(
+                cleanEmail.substringBefore("@"),
+                pass
+            )
+
+            firebase.createUserWithEmailAndPassword(
+                cleanEmail,
+                pass
+            ).await()
+
+            mutable.value = mutable.value.copy(
+                session = session,
+                firebaseEmail = firebase.currentUser?.email
+            )
+        } catch (e: Exception) {
+            repo.vault.clear()
+            firebase.signOut()
+            mutable.value = mutable.value.copy(
+                session = null,
+                firebaseEmail = null
+            )
+            throw e
+        }
+
+        refreshData()
     }
     fun resetPassword(email: String) = run {
         require(BusinessRules.validEmail(email)) { "Ingresa tu correo para recuperar el acceso." }
@@ -98,24 +178,100 @@ class ErpViewModel(app: Application) : AndroidViewModel(app) {
             purchases = operations.purchases(owner), movements = operations.movements(owner), documents = operations.documents(owner))
     }
     private suspend fun refreshData() {
-        localData(); repo.resetCacheStatus()
+        repo.resetCacheStatus()
+
+        val failures = mutableListOf<String>()
+        var networkFailure = false
+
+        suspend fun load(name: String, action: suspend () -> Unit) {
+            try {
+                action()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                if (e is java.io.IOException) networkFailure = true
+
+                val reason = when (e) {
+                    is HttpException -> when (e.code()) {
+                        401 -> "sesión vencida; vuelve a ingresar"
+                        403 -> "sin permiso para consultar"
+                        404 -> "ruta no disponible en el servidor"
+                        else -> "error HTTP ${e.code()}"
+                    }
+                    is java.io.IOException -> "sin respuesta del servidor"
+                    else -> "no se pudo cargar; revisa el error en Android Studio"
+                }
+
+                android.util.Log.w(
+                    "ErpData",
+                    "$name: ${e.javaClass.simpleName}"
+                )
+                failures += "$name: $reason"
+            }
+        }
+
         val role = repo.requireSession().user.rol
-        if(BusinessRules.canSell(role)) {
-            mutable.value = mutable.value.copy(quotes = repo.quotes())
-            mutable.value = mutable.value.copy(orders = repo.orders())
-            mutable.value = mutable.value.copy(sales = repo.sales())
+
+        load("Datos locales") {
+            localData()
         }
-        if(BusinessRules.canInventory(role)) mutable.value = mutable.value.copy(inventory = repo.inventory())
-        if(BusinessRules.canWarehouse(role)) {
-            repo.suppliers(); localData()
-            mutable.value = mutable.value.copy(purchaseOrders = repo.purchaseOrders(), receipts = repo.receipts())
-            try { mutable.value = mutable.value.copy(budget = repo.budget()) }
-            catch(e: Exception) { if(e is CancellationException) throw e; mutable.value = mutable.value.copy(budget = null) }
+
+        if (BusinessRules.canSell(role)) {
+            load("Cotizaciones") {
+                mutable.value = mutable.value.copy(quotes = repo.quotes())
+            }
+            load("Pedidos") {
+                mutable.value = mutable.value.copy(orders = repo.orders())
+            }
+            load("Ventas") {
+                mutable.value = mutable.value.copy(sales = repo.sales())
+            }
         }
-        mutable.value = mutable.value.copy(offline = repo.usedCache,
-            updatedAt = if(repo.usedCache) mutable.value.updatedAt else System.currentTimeMillis(),
-            message = if(repo.usedCache) "Parte de los datos proviene del dispositivo. Actualiza antes de operar." else "Datos actualizados.")
+
+        if (BusinessRules.canInventory(role)) {
+            load("Inventario") {
+                mutable.value = mutable.value.copy(inventory = repo.inventory())
+            }
+        }
+
+        if (BusinessRules.canWarehouse(role)) {
+            load("Proveedores") {
+                repo.suppliers()
+                localData()
+            }
+            load("Órdenes de compra") {
+                mutable.value = mutable.value.copy(
+                    purchaseOrders = repo.purchaseOrders()
+                )
+            }
+            load("Recepciones") {
+                mutable.value = mutable.value.copy(receipts = repo.receipts())
+            }
+            load("Presupuesto") {
+                mutable.value = mutable.value.copy(budget = repo.budget())
+            }
+        }
+
+        val offline = repo.usedCache || networkFailure
+
+        mutable.value = mutable.value.copy(
+            offline = offline,
+            updatedAt = if (!offline && failures.isEmpty()) {
+                System.currentTimeMillis()
+            } else {
+                mutable.value.updatedAt
+            },
+            message = when {
+                failures.isNotEmpty() ->
+                    "Carga parcial. " + failures.joinToString(" · ")
+                offline ->
+                    "Mostrando datos guardados. Actualiza antes de operar."
+                else ->
+                    "Datos actualizados."
+            }
+        )
     }
+
+
     fun loadCache() = run {
         val role = repo.requireSession().user.rol
         if(BusinessRules.canSell(role)) mutable.value = mutable.value.copy(quotes = repo.quotes(false), orders = repo.orders(false), sales = repo.sales(false))

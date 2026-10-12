@@ -29,8 +29,8 @@ import pe.edu.unmsm.siderurgica.domain.BusinessRules
 @Composable fun LoginScreen(vm: ErpViewModel, state: UiState) {
     var identifier by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var erpUser by rememberSaveable { mutableStateOf("") }
-    var erpPassword by remember { mutableStateOf("") }
+    /*var erpUser by rememberSaveable { mutableStateOf("") }
+    var erpPassword by remember { mutableStateOf("") }*/
     var visible by remember { mutableStateOf(false) }
     var register by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -50,15 +50,31 @@ import pe.edu.unmsm.siderurgica.domain.BusinessRules
             visualTransformation = if(visible) VisualTransformation.None else PasswordVisualTransformation(), shape = RoundedCornerShape(12.dp),
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
             trailingIcon = { TextButton(onClick = { visible = !visible }) { Text(if(visible) "Ocultar" else "Ver") } })
-        if(vm.firebaseConfigured() && !register) {
+        /*if(vm.firebaseConfigured() && !register) {
             Text("Acceso empresarial", style = MaterialTheme.typography.titleSmall)
             Field(erpUser, { erpUser = it }, "Usuario ERP asignado")
             OutlinedTextField(erpPassword, { erpPassword = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Contraseña ERP, si es distinta") },
                 visualTransformation = PasswordVisualTransformation(), supportingText = { Text("Si la dejas vacía, usaremos la contraseña anterior.") })
+        }*/
+
+        Button(
+            onClick = {
+                if (register) {
+                    vm.registerUnificado(identifier, password)
+                } else {
+                    vm.loginUnificado(identifier, password)
+                }
+            },
+            enabled = !state.loading &&
+                    identifier.isNotBlank() &&
+                    password.isNotBlank(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 54.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text(if (register) "Crear cuenta Firebase" else "Ingresar")
         }
-        Button(onClick = { if(register) vm.registerUnificado(identifier, password) else vm.loginUnificado(identifier, password, erpUser, erpPassword) },
-            enabled = !state.loading && identifier.isNotBlank() && password.isNotBlank() && (register || !vm.firebaseConfigured() || erpUser.isNotBlank()),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp), shape = RoundedCornerShape(14.dp)) { Text(if(register) "Crear cuenta Firebase" else "Ingresar") }
         if(vm.firebaseConfigured()) {
             TextButton(onClick = { register = !register }, enabled = !state.loading, modifier = Modifier.fillMaxWidth()) { Text(if(register) "Ya tengo una cuenta" else "Crear cuenta de acceso") }
             TextButton(onClick = { vm.resetPassword(identifier) }, enabled = !state.loading, modifier = Modifier.fillMaxWidth()) { Text("Recuperar contraseña Firebase") }
@@ -123,9 +139,47 @@ import pe.edu.unmsm.siderurgica.domain.BusinessRules
         Text("Tu dispositivo", style = MaterialTheme.typography.titleMedium)
         ActionRow("Borradores", "Revisa antes de enviar al ERP", Icons.Default.Edit) { navigate("drafts") }
         ActionRow("Consultar datos guardados", "Continúa consultando sin conexión", Icons.AutoMirrored.Filled.List, cache)
-        if(canBiometric) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { Text("Proteger con biometría"); Text("Al volver a abrir la app", style = MaterialTheme.typography.bodySmall) }
-            Switch(biometric, onCheckedChange = onBiometric)
+        val biometricStatus = androidx.biometric.BiometricManager
+            .from(activity)
+            .canAuthenticate(
+                androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
+            )
+
+        val biometricReason = when (biometricStatus) {
+            androidx.biometric.BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED ->
+                "Android no informa una huella o biometría registrada."
+
+            androidx.biometric.BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE ->
+                "Sensor temporalmente no disponible. Desbloquea el teléfono y vuelve a intentar."
+
+            androidx.biometric.BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE ->
+                "Android no informa un sensor biométrico compatible."
+
+            androidx.biometric.BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED ->
+                "Android requiere una actualización de seguridad para usar biometría."
+
+            else ->
+                "Biometría no disponible (estado $biometricStatus)."
+        }
+
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Proteger con biometría")
+                Text(
+                    if (canBiometric) "Al volver a abrir la app"
+                    else biometricReason,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Switch(
+                checked = biometric,
+                onCheckedChange = onBiometric,
+                enabled = canBiometric
+            )
         }
         OutlinedButton(onClick = { if(Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) else android.widget.Toast.makeText(activity, "Las notificaciones están disponibles en los ajustes de Android", android.widget.Toast.LENGTH_LONG).show() }, modifier = Modifier.fillMaxWidth()) { Text("Activar alertas de inventario") }
         Text("Modo claro u oscuro según tu dispositivo.", style = MaterialTheme.typography.bodySmall)

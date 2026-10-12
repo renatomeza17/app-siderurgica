@@ -35,7 +35,35 @@ class MainActivity : FragmentActivity() {
     var biometric by rememberSaveable { mutableStateOf(settings.getBoolean("biometric", false)) }
     var unlocked by remember { mutableStateOf(state.session == null || !biometric) }
     val snack = remember { SnackbarHostState() }
-    val canBiometric = remember { BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS }
+    /*val canBiometric = remember { BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS }*/
+    var canBiometric by remember { mutableStateOf(false) }
+
+    val lifecycleOwner =
+        androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner, activity) {
+        fun checkBiometric() {
+            canBiometric = BiometricManager.from(activity)
+                .canAuthenticate(
+                    BiometricManager.Authenticators.BIOMETRIC_WEAK
+                ) == BiometricManager.BIOMETRIC_SUCCESS
+        }
+
+        checkBiometric()
+
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                checkBiometric()
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     LaunchedEffect(state.session?.user?.id) { page = "home"; salesTab = 0 }
     LaunchedEffect(state.message, state.loading) {
         if (state.message.isNotBlank() && !state.loading) { snack.showSnackbar(state.message, duration = SnackbarDuration.Long); vm.clearMessage() }
