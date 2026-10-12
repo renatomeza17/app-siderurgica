@@ -12,8 +12,8 @@ data class LoginResult(val success: Boolean, val mensaje: String?, val usuario: 
 data class Quote(
     val id: Long = 0, val codigo: String? = null, val cliente: String = "", val ruc: String? = null,
     val producto: String = "", val cantidad: Int = 0, val inventarioId: Long? = null,
-    @SerializedName("precio_unitario") val precioUnitario: Double = 0.0,
-    val subtotal: Double? = null, @SerializedName("descuento_porcentaje") val descuentoPorcentaje: Int? = null,
+    @SerializedName(value = "precio_unitario", alternate = ["precioUnitario"]) val precioUnitario: Double = 0.0,
+    val subtotal: Double? = null, @SerializedName(value = "descuento_porcentaje", alternate = ["descuentoPorcentaje"]) val descuentoPorcentaje: Int? = null,
     val total: Double? = null, val estado: String? = null,
     @SerializedName("usuario_id") val usuarioId: Long? = null
 )
@@ -26,10 +26,10 @@ data class QuoteCreated(val success: Boolean, val mensaje: String?, val cotizaci
 data class Order(
     val id: Long = 0, val codigo: String? = null, val cliente: String = "", val ruc: String? = null,
     val producto: String = "", val cantidad: Int = 0, val inventarioId: Long? = null,
-    @SerializedName("precio_unitario") val precioUnitario: Double = 0.0,
+    @SerializedName(value = "precioUnitario", alternate = ["precio_unitario"]) val precioUnitario: Double = 0.0,
     val subtotal: Double? = null, val igv: Double? = null, val total: Double? = null,
     val estado: String? = null, val estadoStock: String? = null,
-    @SerializedName("usuario_id") val usuarioId: Long? = null
+    @SerializedName(value = "usuarioId", alternate = ["usuario_id"]) val usuarioId: Long? = null
 )
 data class Sale(
     val id: Long = 0, val codigo: String? = null, val cliente: String = "", val ruc: String? = null,
@@ -37,7 +37,7 @@ data class Sale(
     val subtotal: Double = 0.0, val igv: Double = 0.0, val total: Double = 0.0,
     val estado: String? = null, val pedidoId: Long? = null
 )
-data class InventoryItem(val id: Long, val producto: String?, val stock: Int?, val stockDisponible: Int?, val precioUnitario: Double?)
+data class InventoryItem(val id: Long, val producto: String?, val stock: Int?, val stockDisponible: Int?, val precioUnitario: Double?, val stockMinimo: Int? = null, val categoria: String? = null, val unidad: String? = null, val stockObjetivo: Int? = null, val stockReservado: Int? = null)
 data class StateBody(val estado: String)
 data class ConvertedOrder(val pedido: Order)
 
@@ -53,4 +53,28 @@ interface ErpApi {
     @GET("ventas") suspend fun sales(): List<Sale>
     @POST("ventas/desde-pedido/{id}") suspend fun saleFromOrder(@Path("id") id: Long): Sale
     @GET("inventario") suspend fun inventory(): List<InventoryItem>
+    @GET("inventario/{id}") suspend fun inventoryItem(@Path("id") id: Long): InventoryItem
+    @PATCH("inventario/{id}/stock") suspend fun changeStock(@Path("id") id: Long, @Body body: StockBody): StockResult
+    @PUT("inventario/{id}") suspend fun adjustStock(@Path("id") id: Long, @Body body: InventoryUpdate): StockResult
+    @GET("proveedor") suspend fun suppliers(): List<RemoteSupplier>
+    @POST("proveedor") suspend fun createSupplier(@Body body: SupplierBody): RemoteSupplier
+    @GET("orden-compra") suspend fun purchaseOrders(): List<PurchaseOrder>
+    @POST("orden-compra") suspend fun createPurchaseOrder(@Body body: PurchaseOrderBody): PurchaseOrder
+    @PATCH("orden-compra/{id}/estado") suspend fun purchaseState(@Path("id") id: Long, @Body body: StateBody): PurchaseOrder
+    @GET("compra") suspend fun receipts(): List<Receipt>
+    @POST("compra") suspend fun receivePurchase(@Body body: ReceiptBody): ReceiptResult
+    @GET("presupuesto") suspend fun budget(): Budget
 }
+
+
+data class StockBody(val tipo: String, val cantidad: Int)
+data class StockResult(val success: Boolean, val mensaje: String?, val inventario: InventoryItem?)
+data class InventoryUpdate(val producto: String, val categoria: String?, val stock: Int, val stockMinimo: Int?, val precioUnitario: Double?, val unidad: String?, val stockObjetivo: Int?)
+data class RemoteSupplier(val id: Long, val nombre: String, val ruc: String, val contacto: String?, val telefono: String?, val estado: String?)
+data class SupplierBody(val nombre: String, val ruc: String, val contacto: String, val telefono: String, val estado: String = "Activo")
+data class PurchaseOrder(val id: Long, val codigo: String?, val proveedorId: Long, val producto: String, val cantidad: String?, val total: Double, val estado: String?)
+data class PurchaseOrderBody(val proveedorId: Long, val producto: String, val cantidad: String, val total: Double, val usuarioId: Long)
+data class Receipt(val id: Long, val ordenCompraId: Long?, val proveedorId: Long, val inventarioId: Long?, val producto: String, val cantidad: Int, val precioUnitario: Double, val total: Double)
+data class ReceiptBody(val ordenCompraId: Long, val proveedorId: Long, val inventarioId: Long?, val producto: String, val cantidad: Int, val precioUnitario: Double, val total: Double, val usuarioId: Long)
+data class ReceiptResult(val compra: Receipt, val inventario: InventoryItem, val productoCreado: Boolean, val stockAnterior: Int)
+data class Budget(val periodo: String, val montoTotal: Double, val montoDisponible: Double)

@@ -1,1 +1,1 @@
-<paths xmlns:android="http://schemas.android.com/apk/res/android"><cache-path name="comprobantes" path="comprobantes/"/></paths>
+<paths xmlns:android="http://schemas.android.com/apk/res/android"><cache-path name="comprobantes" path="comprobantes/"/><cache-path name="capturas" path="capturas/"/></paths>

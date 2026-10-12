@@ -25,5 +25,7 @@ data class Draft(
     @Query("DELETE FROM drafts WHERE localId = :id AND owner = :owner") suspend fun deleteDraft(id: String, owner: String)
 }
 
-@Database(entities = [CachedRecord::class, Draft::class], version = 1, exportSchema = false)
-abstract class LocalStore : RoomDatabase() { abstract fun dao(): LocalDao }
+@Database(entities = [CachedRecord::class, Draft::class, Supplier::class, Purchase::class, StockMovement::class, ScannedDocument::class], version = 2, exportSchema = false)
+abstract class LocalStore : RoomDatabase() { abstract fun dao(): LocalDao
+    abstract fun operations(): OperationsDao
+}
