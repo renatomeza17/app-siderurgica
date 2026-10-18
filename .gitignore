@@ -1,7 +1,16 @@
 .gradle/
-.idea/
-build/
-app/build/
+**/build/
 local.properties
+.idea/
 app/google-services.json
-*.iml
+*.jks
+*.keystore
+
+node_modules/
+.npm-cache/
+.kotlin/
+*-debug.log
+
+# Temporales y logs locales
+*.log
+.codex-backups/
