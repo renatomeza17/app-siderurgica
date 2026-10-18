@@ -1,4 +1,4 @@
-package pe.edu.unmsm.siderurgica.ui
+package pe.edu.unmsm.siderurgica.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
