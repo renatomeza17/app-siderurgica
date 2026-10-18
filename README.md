@@ -1,34 +1,26 @@
-# Siderúrgica Perú móvil — avance sprints 1 y 2
+> Compras actualizadas: pantallas agrupadas y foto opcional de guía/factura dentro de Registrar entrega. Consulta `GUIA_HU08_COMPRAS_Y_PRUEBAS.md`. Publica ambos archivos de reglas actuales.
 
-Proyecto Android nativo en Kotlin y Jetpack Compose. Se construyó a partir del backlog entregado y de `SIDERURGICA-ERP-feature-automatizacion.zip` (backend Spring Boot + frontend Angular). El código del ERP de referencia no se modifica aquí.
+> Consulta RUC vigente: directa desde Android con Retrofit/corutinas, sin campo de token en pantalla. Configura `DECOLECTA_TOKEN` en `local.properties` y recompila. No requiere Cloud Run. Consulta `CONFIGURACION_CONSULTA_RUC.md` para pasos y límites del modo académico.
 
-## Abrir y configurar
+> Actualización de compras HU08 e inventario HU07: consulta `GUIA_HU08_COMPRAS_Y_PRUEBAS.md`. Requiere publicar el nuevo `firestore.rules`.
 
-1. Abre esta carpeta en Android Studio con JDK 17 y SDK 36. Si Android Studio solicita Gradle, genera el wrapper con Gradle 8.13 (`gradle wrapper --gradle-version 8.13`) y sincroniza el proyecto. El wrapper binario no se incluye.
-2. Configura un proyecto Firebase Android con el identificador `pe.edu.unmsm.siderurgica`. Habilita Email/Password en Authentication y Storage. Descarga `google-services.json` y colócalo en `app/`. Publica las reglas incluidas en `firebase.storage.rules` tras revisarlas en tu proyecto Firebase. No subas el JSON a un repositorio público.
-3. En `~/.gradle/gradle.properties` agrega `ERP_API_URL=http://10.0.2.2:3000/` para emulador y backend local. En teléfono físico usa una URL HTTPS alcanzable desde el teléfono. La barra final es obligatoria. La app release bloquea HTTP; debug admite HTTP para desarrollo local.
-4. Levanta el backend con su PostgreSQL y variables de entorno según `BACKEND/README.md`. Crea o utiliza un usuario ERP con rol `VENTAS` o `ADMIN`. Inicia Firebase con correo/contraseña y vincula por separado el usuario del ERP.
+> ACTUALIZACIÓN LOCAL DEL FLUJO COMERCIAL: consulta CAMBIOS_FLUJO_COMERCIAL.md. Listado, registro y detalle están separados; descuentos automáticos por cantidad; aceptación del cliente con canal y sustento; PDF de cotización para compartir. No se agregó gestión de pagos. Publica el firestore.rules actualizado antes de probar las decisiones.
 
-## Implementado
+# Siderúrgica Perú — Firebase 0.6.0
 
-| Historia | Avance en este proyecto |
-| --- | --- |
-| HU01 | Kotlin, Compose Material 3, capas UI/datos, ViewModel, Retrofit y corrutinas. |
-| HU02 | Firebase Email/Password: registro, acceso, recuperación, cierre. ERP `/login` entrega JWT y rol. Persistencia cifrada del token con Android Keystore. Acceso biométrico opcional al reabrir con una sesión ERP guardada. |
-| HU03 | Room mantiene cotizaciones, pedidos, ventas e inventario por usuario ERP. WorkManager actualiza lecturas con red. Borradores de cotización/pedido se guardan localmente y se envían tras confirmación. |
-| HU04 | Listado, búsqueda y alta de cotizaciones con Retrofit. Previsualización del descuento por cantidad que aplica el backend. Aprobación genera pedido en una transacción del ERP. |
-| HU05 | Alta y listado de pedidos; aprobación valida/reserva stock y genera venta mediante el flujo existente del backend. Anulación usa el estado `ANULADO` aceptado por el ERP. |
-| HU06 | PDF informativo de venta, compartir con Android y subida opcional a Firebase Storage bajo la cuenta Firebase. |
+Proyecto Android Studio completo para HU03, HU04, HU05, HU06, HU07 y HU08. Conserva Authentication, interfaz, roles, biometría y captura/OCR de la entrega anterior. **Lee GUIA_SPRINTS_1_2_3.md antes de ejecutar.**
 
-## Límites del backend de referencia
+- Kotlin, Compose/Material 3, ViewModels, repositorios, inyección Koin.
+- SQLite/Room por usuario: perfiles, catálogo, listados y operaciones. WorkManager con reintentos, confirmación, estados y notificaciones.
+- Clientes y consulta RUC opcional con Retrofit/corrutinas. Cotizaciones/pedidos directos con hasta tres productos, descuentos por línea y cálculo de IGV antes de confirmar.
+- Pedido aprobado sin descuento de stock; confirmación de venta atómica con todos sus movimientos. Sin sobreventa ni ventas parciales.
+- Boleta/factura PDF académica: generación local, detalle, vista previa, guardar/compartir nativo, subida y descarga de Storage. Sin emisión tributaria/SUNAT.
+- Inventario: entradas, salidas, ajustes con comprobación de versión del stock e historial de respaldo.
+- Proveedores, órdenes de compra con presupuesto y recepción completa que incrementa stock una sola vez. Cola offline.
+- Revisión periódica WorkManager, notificación local y receptor FCM con tokens privados. Emisor FCM en Kotlin/JVM para Cloud Run dentro de `cloud-notifier`, con instrucciones de despliegue.
 
-- El ERP actual autentica con nombre de usuario/JWT. Firebase no emite permisos ERP. Un registro nuevo en Firebase **no crea un usuario del ERP**; el administrador debe darle una cuenta y rol. La app pide ambas identidades para acceder a Storage y operar ventas.
-- El backend admite un producto por cotización y pedido. La pantalla respeta ese contrato, sin fingir un carrito de varias líneas.
-- Aprobar una cotización ya genera su pedido; aprobar un pedido ya genera la venta y lo pasa a `FACTURADO`. La app no repite esas operaciones.
-- El ERP no ofrece idempotencia de escritura. Reenviar automáticamente un POST tras perder la respuesta puede duplicar registros. Por eso WorkManager sincroniza **solo lecturas** y los borradores requieren confirmación manual. La sincronización automática segura de operaciones pendientes sigue pendiente en el backend.
-- El backend no emite comprobantes tributarios. El PDF generado es una **constancia informativa**, no una boleta o factura SUNAT. La emisión fiscal requiere datos, numeración y un servicio de facturación válidos.
-- No se incluyen credenciales, configuración privada de Firebase ni endpoints de producción.
+La app no consume el ERP de Render/Railway ni Neon. El emisor FCM es un componente confiable de notificaciones, separado del APK. Requiere despliegue y configuración en tu cuenta para recibir push real. No se publicaron recursos/reglas ni se activó facturación.
 
-## Validación
+Abre esta carpeta en Android Studio, usa JDK 21 y SDK 36. Conserva tu `google-services.json` y publica las reglas nuevas integrándolas con otras aplicaciones si comparten proyecto. No borres usuarios, productos o datos anteriores.
 
-Se cotejaron nombres de campos y rutas contra los controladores, entidades y servicios de la versión del ERP proporcionada. Este entorno no tiene Android SDK ni Gradle, por lo que aún faltan sincronización de dependencias, compilación, emulador y pruebas de extremo a extremo en Android Studio.
+VALIDACION.md documenta pruebas y límites reales. GUIA_PRIMER_AVANCE.md y los demás documentos antiguos son históricos; esta guía de sprints tiene prioridad para la versión 0.6.0.
