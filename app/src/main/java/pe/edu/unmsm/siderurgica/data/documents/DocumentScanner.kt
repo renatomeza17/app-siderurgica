@@ -1,4 +1,4 @@
-package pe.edu.unmsm.siderurgica.data
+package pe.edu.unmsm.siderurgica.data.documents
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -11,8 +11,8 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import pe.edu.unmsm.siderurgica.domain.InvoiceParser
-import pe.edu.unmsm.siderurgica.domain.ExtractedInvoice
+import pe.edu.unmsm.siderurgica.domain.rules.InvoiceParser
+import pe.edu.unmsm.siderurgica.domain.rules.ExtractedInvoice
 import java.io.File
 
 data class ScanResult(val imagePath: String, val invoice: ExtractedInvoice, val codes: String, val rawText: String)
